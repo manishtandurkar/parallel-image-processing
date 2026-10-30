@@ -1,0 +1,12 @@
+build*/
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+# generated inputs and outputs
+data/*.png
+data/*.ppm
+out/
+*.png
+!report/**/*.png
+colab/*_output.ipynb
