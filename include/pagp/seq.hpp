@@ -6,6 +6,8 @@
 
 namespace pagp {
 
+struct RowKernels;
+
 // Scratch buffers for multi-stage ops, sized once outside the timed region.
 struct Workspace {
   std::vector<uint8_t> u8a, u8b;
@@ -19,6 +21,9 @@ struct Workspace {
 };
 
 namespace seq {
+
+// Scalar row kernels (see rows.hpp); OpenMP reuses them so its speedup isolates threading.
+const RowKernels &row_kernels();
 
 void gray(const uint8_t *rgb, uint8_t *out, int w, int h);
 void blur2d(const uint8_t *in, uint8_t *out, int w, int h);

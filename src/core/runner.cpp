@@ -20,7 +20,8 @@ int tolerance(Op op) {
     return 1;
   case Op::Pipeline:
   case Op::Fused:
-    // Not fixed by the spec: a +-1 blur difference can grow through Sobel. Revisit with SIMD/GPU data.
+    // Not fixed by the spec: a +-1 blur difference can grow through Sobel. Revisit with SIMD/GPU
+    // data.
     return 1;
   }
   return 0;
@@ -117,7 +118,9 @@ int run_main(int argc, char **argv, const Backend &be) {
     r.op = op_name(o.op);
     r.width = src.w;
     r.height = src.h;
-    if (o.threads > 0)
+    if (be.workers)
+      r.workers = std::to_string(be.workers(o));
+    else if (o.threads > 0)
       r.workers = std::to_string(o.threads);
     r.reps = o.reps;
     r.median_ms = t.median_ms;

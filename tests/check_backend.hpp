@@ -10,12 +10,12 @@ namespace pagp {
 
 // Returns the number of failing (op, variant, size) cases. exact = require max_abs_diff == 0.
 inline int check_backend(const Backend &be, bool exact, int threads = 0) {
-  static const int kSizes[][2] = {{1, 1},   {2, 3},    {3, 7},    {5, 5},  {16, 16},
+  static const int kSizes[][2] = {{1, 1},   {2, 3},     {3, 7},    {5, 5},   {16, 16},
                                   {64, 64}, {257, 131}, {640, 37}, {33, 300}};
   static const Op kOps[] = {Op::Gray, Op::Blur2d, Op::BlurSep, Op::Sobel, Op::Pipeline, Op::Fused};
   Options opts;
   opts.threads = threads;
-  int failures = 0, cases = 0;
+  int failures = 0, cases = 0, worst = 0;
   for (auto &sz : kSizes) {
     Image rgb = generate_image(sz[0], sz[1], 7);
     Image gray(rgb.w, rgb.h, 1);
@@ -32,6 +32,8 @@ inline int check_backend(const Backend &be, bool exact, int threads = 0) {
         int d = max_abs_diff(out, ref);
         int tol = exact ? 0 : tolerance(op);
         ++cases;
+        if (d > worst)
+          worst = d;
         if (d < 0 || d > tol) {
           ++failures;
           std::printf("FAIL %s %s/%s %dx%d max_abs_diff=%d tol=%d\n", be.name, op_name(op),
@@ -40,7 +42,8 @@ inline int check_backend(const Backend &be, bool exact, int threads = 0) {
       }
     }
   }
-  std::printf("%s: %d/%d cases passed\n", be.name, cases - failures, cases);
+  std::printf("%s: %d/%d cases passed, worst max_abs_diff=%d\n", be.name, cases - failures, cases,
+              worst);
   return failures;
 }
 

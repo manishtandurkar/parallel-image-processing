@@ -285,7 +285,10 @@ AVX2 `__m256i` widened to 16-bit/32-bit as needed). Handle the remainder with sc
 contiguous inner loop) so we can compare hand-written vs compiler-generated SIMD.
 
 **omp.** `parallel for` over rows. Variants: `static`, `dynamic`, `guided` schedules, and a deliberate
-`false_sharing` demo (per-thread counters in a contiguous array vs padded to 64-byte cache lines).
+`false_sharing` demo (per-thread counters in a contiguous array vs padded to 128 bytes, plus
+`padded64`; Apple M-series cache lines are 128 B, x86 lines are 64 B). The counters are relaxed atomics:
+with plain volatile stores the M5 showed no false-sharing effect (hypothesis: store-buffer merging on
+weakly ordered arm64; unverified, compare on WSL x86 before claiming it). Also `reduction` and `atomic`.
 Thread sweep: 1, 2, 4, ... up to the core count. On the Mac, also compare P-core-only counts.
 
 **mpi.** Row-block decomposition with `MPI_Scatterv` / `MPI_Gatherv`. Each rank holds its rows plus
