@@ -93,3 +93,23 @@ if(PAGP_OMP)
   target_link_libraries(pagp_omp_lib PUBLIC OpenMP::OpenMP_CXX)
   add_test(NAME omp_vs_seq COMMAND test_omp 1 2 3 10)
 endif()
+
+if(PAGP_MPI)
+  find_package(MPI REQUIRED COMPONENTS CXX)
+  # Own driver (src/mpi/main.cpp) instead of run_main: timing and I/O are collective.
+  add_library(pagp_mpi_lib STATIC src/mpi/mpi.cpp)
+  target_include_directories(pagp_mpi_lib PUBLIC src/mpi)
+  target_link_libraries(pagp_mpi_lib PUBLIC pagp_core MPI::MPI_CXX)
+  add_executable(pagp_mpi src/mpi/main.cpp)
+  target_link_libraries(pagp_mpi PRIVATE pagp_mpi_lib)
+  add_executable(test_mpi tests/test_mpi.cpp)
+  target_link_libraries(test_mpi PRIVATE pagp_mpi_lib)
+  foreach(np 1 3 4)
+    add_test(NAME mpi_vs_seq_np${np}
+      COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} ${np} ${MPIEXEC_PREFLAGS}
+              $<TARGET_FILE:test_mpi> ${MPIEXEC_POSTFLAGS})
+  endforeach()
+  add_test(NAME mpi_cli_smoke
+    COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS}
+            $<TARGET_FILE:pagp_mpi> --gen 97x61 --op pipeline --variant overlap --reps 1 --validate)
+endif()
