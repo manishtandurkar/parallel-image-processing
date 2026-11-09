@@ -20,6 +20,7 @@ struct Options {
   int reps = 10;                   // --reps
   int warmup = 2;                  // fixed by the benchmark protocol
   int threads = 0;                 // --threads (0 = backend default)
+  int block_w = 16, block_h = 16;  // --block WxH (cuda thread block)
   bool validate = false;           // --validate
   std::string save;                // --save <path>
   std::string csv;                 // --csv <path>

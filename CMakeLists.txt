@@ -18,7 +18,8 @@ option(PAGP_AUTOVEC_REPORT "Emit compiler vectorization reports for autovec" OFF
 
 # No FMA contraction anywhere: gray and sobel must match seq bit-for-bit, and contraction
 # would make the rounding of float expressions depend on the compiler and target.
-add_compile_options(-Wall -Wextra -ffp-contract=off)
+# (CXX only: nvcc gets the equivalent --fmad=false on the CUDA target.)
+add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-ffp-contract=off>")
 
 # Core library: image I/O, CLI, timing, CSV, validation, shared driver, and the seq reference
 # (every binary links seq so --validate can compare against it).
@@ -112,4 +113,27 @@ if(PAGP_MPI)
   add_test(NAME mpi_cli_smoke
     COMMAND ${MPIEXEC_EXECUTABLE} ${MPIEXEC_NUMPROC_FLAG} 3 ${MPIEXEC_PREFLAGS}
             $<TARGET_FILE:pagp_mpi> --gen 97x61 --op pipeline --variant overlap --reps 1 --validate)
+endif()
+
+if(PAGP_CUDA)
+  # Colab T4 = sm_75; override with -DCMAKE_CUDA_ARCHITECTURES=<nn> for another GPU.
+  if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+    set(CMAKE_CUDA_ARCHITECTURES 75)
+  endif()
+  enable_language(CUDA)
+  set(CMAKE_CUDA_STANDARD 17)
+  find_package(CUDAToolkit REQUIRED)
+  add_library(pagp_cuda_lib STATIC src/cuda/cuda.cu)
+  # --fmad=false: no fused multiply-add, so float results match seq bit-for-bit.
+  target_compile_options(pagp_cuda_lib PRIVATE
+    $<$<COMPILE_LANGUAGE:CUDA>:--fmad=false -Xcompiler=-ffp-contract=off>)
+  target_include_directories(pagp_cuda_lib PUBLIC src/cuda)
+  target_link_libraries(pagp_cuda_lib PUBLIC pagp_core CUDA::cudart)
+  add_executable(pagp_cuda src/cuda/main.cpp)
+  target_link_libraries(pagp_cuda PRIVATE pagp_cuda_lib)
+  add_executable(test_cuda tests/test_cuda.cpp)
+  target_link_libraries(test_cuda PRIVATE pagp_cuda_lib)
+  add_test(NAME cuda_vs_seq COMMAND test_cuda)
+  add_test(NAME cuda_cli_smoke
+    COMMAND pagp_cuda --gen 97x61 --op fused --block 8x8 --reps 1 --validate)
 endif()

@@ -139,26 +139,32 @@ locally; only execution happens on the Colab VM. No Colab subscription is used.
 One-time setup (on either laptop; on Windows, inside WSL):
 ```sh
 uv tool install google-colab-cli      # or: pip install google-colab-cli (needs Python 3.13+)
-colab auth                            # links the Google account once
+colab sessions                        # first call opens a browser OAuth consent once (token cached in
+                                      # ~/.config/colab-cli/token.json); `colab whoami` shows the account
 colab version
 ```
 
 Standard GPU session (named `pagp` so every command targets the same VM):
 ```sh
 colab new --gpu T4 -s pagp                       # provision a free T4 runtime
-colab exec -s pagp -f colab/pagp_gpu.ipynb       # run the notebook remotely; writes colab/pagp_gpu_output.ipynb locally
-colab download -s pagp ...                       # pull bench CSVs and output images into bench/results/
+colab upload -s pagp pagp.tar.gz /content/pagp.tar.gz              # working tree (see colab/README.md)
+colab exec -s pagp --env PAGP_STEPS=build -f colab/run_gpu.py      # extract, build, ctest
+colab exec -s pagp --env PAGP_STEPS=sweep -f colab/run_gpu.py      # bench/run_gpu.sh colab-t4
+colab download -s pagp /content/pagp/bench/results/<file> bench/results/<file>
 colab log -s pagp -o colab/logs/<date>.md        # save the run log for the report
 colab stop -s pagp                               # ALWAYS release the VM when done (free quota)
 ```
 
 Rules:
+- `colab auth` does NOT log the CLI in: it injects GCP credentials into the VM kernel (and needs a TTY). CLI
+  login is the OAuth flow above (or `--auth=adc` with gcloud). Run `colab skill` for the CLI's own guide.
 - Before the first CLI use, read the `COLAB_SKILL.md` bundled with the CLI and `colab --help`. If command names or
   flags differ from this file, follow the CLI's own docs and update this section.
 - `colab/pagp_gpu.ipynb` is edited locally (Jupyter / VS Code). `colab exec` sends only the notebook, so its first
   cells must get the code onto the VM: `git clone` the repo (preferred), or use the CLI's upload command for files
   not in git (e.g. large test images). Then `!nvidia-smi`, `!nvcc -arch=sm_75 ...`, and run the benchmark binaries.
-- Plain scripts also work: `colab exec -s pagp -f colab/run_gpu.py` for a quick non-notebook run.
+- Plain scripts also work and are what we use: `colab/run_gpu.py`, with the source uploaded as a tarball so
+  untested local changes can run on the GPU before they are committed.
 - Interactive debugging stays in the terminal: `colab repl -s pagp` or `colab console -s pagp`. Not the browser.
 - Keep each session short: run the sweep, download results, stop. Free-tier sessions can be preempted or
   disconnected, so download results after every benchmark batch rather than at the end.

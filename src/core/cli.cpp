@@ -27,6 +27,7 @@ static void usage(const char *prog) {
                "  --variant <name>   backend-specific variant (default: backend default)\n"
                "  --reps N           timed repetitions after 2 warm-ups (default 10)\n"
                "  --threads N        worker threads (omp)\n"
+               "  --block WxH        thread block size (cuda, default 16x16)\n"
                "  --validate         compare with the seq reference\n"
                "  --save <path>      write the output image (PNG)\n"
                "  --csv <path>       append one result row\n"
@@ -85,6 +86,14 @@ bool parse_cli(int argc, char **argv, Options &o) {
       if (!next(v))
         return false;
       o.threads = std::atoi(v);
+    } else if (a == "--block") {
+      if (!next(v))
+        return false;
+      if (std::sscanf(v, "%dx%d", &o.block_w, &o.block_h) != 2 || o.block_w <= 0 ||
+          o.block_h <= 0 || o.block_w * o.block_h > 1024) {
+        std::fprintf(stderr, "error: --block expects WxH with W*H <= 1024, got '%s'\n", v);
+        return false;
+      }
     } else if (a == "--save") {
       if (!next(v))
         return false;
