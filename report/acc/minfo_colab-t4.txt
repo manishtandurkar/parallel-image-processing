@@ -1,0 +1,191 @@
+[ 83%] Built target pagp_core
+[ 91%] Building CXX object CMakeFiles/pagp_acc_lib.dir/src/acc/acc.cpp.o
+pagp::acc::Context::Context(int, int, pagp::Op, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>> const&):
+    252, Generating enter data create(in[:n_in])
+         Generating enter data copyin(g[:30])
+         Generating enter data create(out[:n])
+    254, Generating enter data create(a[:n],b[:n])
+    257, Generating enter data create(tmp[:n])
+pagp::acc::Context::~Context():
+    270, Generating exit data delete(tmp[:n])
+    273, Generating exit data delete(a[:n],b[:n])
+    275, Generating exit data delete(in[:n_in],out[:n],g[:30])
+pagp::acc::run(pagp::Op, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>> const&, pagp::acc::Context&, unsigned char const*, unsigned char*):
+    335, Generating update device(in[:n_in])
+    364, Generating update self(out[:n])
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::gray(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, unsigned char const*, unsigned char*, int, int):
+    161, Generating implicit firstprivate(w,h)
+         Generating NVIDIA GPU code
+        161,   /* blockIdx.x threadIdx.x collapsed */
+             #pragma acc loop gang, vector(128) collapse(2) /* blockIdx.x threadIdx.x */
+             Generating implicit private(i)
+    161, Generating default present(o[:],in)
+         Loop carried dependence due to exposed use of o prevents parallelization
+         Accelerator serial kernel generated
+         Generating default present(o[:],in)
+         Loop is parallelizable
+         Generating copyout(o[:n]) [if not already present]
+         Generating copyin(in[:n_in]) [if not already present]
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::blur2d(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, unsigned char const*, unsigned char*, float const*, int, int):
+          51, Loop is parallelizable
+          53, Loop is parallelizable
+    169, Generating implicit firstprivate(w,h)
+         Generating NVIDIA GPU code
+         51, #pragma acc loop seq
+             Generating implicit reduction(+:.inl_sum_7144)
+         53, #pragma acc loop seq
+             Generating implicit reduction(+:.inl_sum_7144)
+        169,   /* blockIdx.x threadIdx.x collapsed */
+             #pragma acc loop gang, vector(128) collapse(2) /* blockIdx.x threadIdx.x */
+    169, Generating default present(o[:],in,g)
+         Loop carried dependence due to exposed use of o prevents parallelization
+         Generating default present(in,g)
+         Loop is parallelizable
+         Generating copyin(g[:30]) [if not already present]
+         Generating copyout(o[:n]) [if not already present]
+         Generating copyin(in[:n]) [if not already present]
+          51, Loop is parallelizable
+          53, Loop is parallelizable
+          51, Loop is parallelizable
+          53, Loop is parallelizable
+          51, Loop is parallelizable
+          53, Loop is parallelizable
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::blur_h(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, unsigned char const*, float*, float const*, int, int):
+          62, Loop is parallelizable
+    176, Generating implicit firstprivate(w,h)
+         Generating NVIDIA GPU code
+         62, #pragma acc loop seq
+             Generating implicit reduction(+:.inl_sum_7252)
+        176,   /* blockIdx.x threadIdx.x collapsed */
+             #pragma acc loop gang, vector(128) collapse(2) /* blockIdx.x threadIdx.x */
+    176, Generating default present(o[:],g,in)
+         Loop carried dependence due to exposed use of o prevents parallelization
+         Generating default present(g)
+         Loop is parallelizable
+         Generating copyin(g[:30]) [if not already present]
+         Generating copyout(o[:n]) [if not already present]
+         Generating copyin(in[:n]) [if not already present]
+          62, Loop is parallelizable
+          62, Loop is parallelizable
+          62, Loop is parallelizable
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::blur_v(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, float const*, unsigned char*, float const*, int, int):
+          70, Loop is parallelizable
+    183, Generating implicit firstprivate(w,h)
+         Generating NVIDIA GPU code
+         70, #pragma acc loop seq
+             Generating implicit reduction(+:.inl_sum_7304)
+        183,   /* blockIdx.x threadIdx.x collapsed */
+             #pragma acc loop gang, vector(128) collapse(2) /* blockIdx.x threadIdx.x */
+    183, Generating default present(o[:],in,g)
+         Loop carried dependence due to exposed use of o prevents parallelization
+         Generating default present(in,g)
+         Loop is parallelizable
+         Generating copyin(g[:30]) [if not already present]
+         Generating copyout(o[:n]) [if not already present]
+         Generating copyin(in[:n]) [if not already present]
+          70, Loop is parallelizable
+          70, Loop is parallelizable
+          70, Loop is parallelizable
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::sobel(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, unsigned char const*, unsigned char*, int, int):
+    189, Generating implicit firstprivate(w,h)
+         Generating NVIDIA GPU code
+        189,   /* blockIdx.x threadIdx.x collapsed */
+             #pragma acc loop gang, vector(128) collapse(2) /* blockIdx.x threadIdx.x */
+    189, Generating default present(o[:],in)
+         Loop carried dependence due to exposed use of o prevents parallelization
+         Accelerator serial kernel generated
+         Generating default present(o[:],in)
+         Loop is parallelizable
+         Generating copyout(o[:n]) [if not already present]
+         Generating copyin(in[:n]) [if not already present]
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::fused(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, unsigned char const*, unsigned char*, float const*, int, int):
+    197, Generating implicit firstprivate(w,h)
+         Generating NVIDIA GPU code
+        197,   /* blockIdx.x threadIdx.x collapsed */
+             #pragma acc loop gang, vector(128) collapse(2) /* blockIdx.x threadIdx.x */
+    197, Generating default present(o[:],in,g)
+         Complex loop carried dependence of g->,in-> prevents parallelization
+         Loop carried dependence due to exposed use of o prevents parallelization
+         Accelerator serial kernel generated
+         Generating default present(o[:],in,g)
+         Loop is parallelizable
+         Generating copyin(g[:30]) [if not already present]
+         Generating copyout(o[:n]) [if not already present]
+         Generating copyin(in[:n_in]) [if not already present]
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::fused_px(unsigned char const*, float const*, int, int, int, int):
+    107, Generating acc routine seq
+         Generating NVIDIA GPU code
+[100%] Linking CXX static library libpagp_acc_lib.a
+[100%] Built target pagp_acc_lib
+[ 83%] Built target pagp_core
+[ 91%] Building CXX object CMakeFiles/pagp_acc_mc_lib.dir/src/acc/acc.cpp.o
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::gray(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, unsigned char const*, unsigned char*, int, int):
+    161, Generating Multicore code
+        161, #pragma acc loop gang
+    161, Loop carried dependence due to exposed use of o prevents parallelization
+         Loop is parallelizable
+         Generating Multicore code
+        161, #pragma acc loop gang
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::blur2d(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, unsigned char const*, unsigned char*, float const*, int, int):
+          51, Loop is parallelizable
+          53, Loop is parallelizable
+    169, Generating Multicore code
+        169, #pragma acc loop gang
+    169, Loop carried dependence due to exposed use of o prevents parallelization
+         Loop is parallelizable
+         Generating Multicore code
+        169, #pragma acc loop gang
+          51, Loop is parallelizable
+              Generating Multicore code
+              51, #pragma acc loop gang
+                  Generating implicit reduction(+:.inl_sum_7171)
+          53, Loop is parallelizable
+          51, Loop is parallelizable
+          53, Loop is parallelizable
+          51, Loop is parallelizable
+          53, Loop is parallelizable
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::blur_h(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, unsigned char const*, float*, float const*, int, int):
+          62, Loop is parallelizable
+    176, Generating Multicore code
+        176, #pragma acc loop gang
+    176, Loop carried dependence due to exposed use of o prevents parallelization
+         Loop is parallelizable
+         Generating Multicore code
+        176, #pragma acc loop gang
+          62, Loop is parallelizable
+              Generating Multicore code
+              62, #pragma acc loop gang
+                  Generating implicit reduction(+:.inl_sum_7265)
+          62, Loop is parallelizable
+          62, Loop is parallelizable
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::blur_v(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, float const*, unsigned char*, float const*, int, int):
+          70, Loop is parallelizable
+    183, Generating Multicore code
+        183, #pragma acc loop gang
+    183, Loop carried dependence due to exposed use of o prevents parallelization
+         Loop is parallelizable
+         Generating Multicore code
+        183, #pragma acc loop gang
+          70, Loop is parallelizable
+              Generating Multicore code
+              70, #pragma acc loop gang
+                  Generating implicit reduction(+:.inl_sum_7321)
+          70, Loop is parallelizable
+          70, Loop is parallelizable
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::sobel(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, unsigned char const*, unsigned char*, int, int):
+    189, Generating Multicore code
+        189, #pragma acc loop gang
+    189, Loop carried dependence due to exposed use of o prevents parallelization
+         Loop is parallelizable
+         Generating Multicore code
+        189, #pragma acc loop gang
+_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::fused(_INTERNAL_29__content_pagp_src_acc_acc_cpp_a1e9ab51::pagp::acc::(anonymous namespace)::Mode, unsigned char const*, unsigned char*, float const*, int, int):
+    197, Generating Multicore code
+        197, #pragma acc loop gang
+    197, Complex loop carried dependence of g->,in-> prevents parallelization
+         Loop carried dependence due to exposed use of o prevents parallelization
+         Loop is parallelizable
+         Generating Multicore code
+        197, #pragma acc loop gang
+[100%] Linking CXX static library libpagp_acc_mc_lib.a
+[100%] Built target pagp_acc_mc_lib

@@ -28,5 +28,5 @@ TODO: CPU model, core count, RAM, Windows + WSL2 kernel, Ubuntu version, gcc ver
 | Driver | 580.82.07 |
 | CUDA | nvcc 13.0 (V13.0.88), built for `sm_75` with `--fmad=false` |
 | Host compiler | g++ 13.3.0 (Ubuntu 24.04), CMake 3.31.10 |
-| nvc++ | TODO (OpenACC not run yet) |
+| nvc++ | NVIDIA HPC SDK 26.11 (`nvhpc-26-11` from NVIDIA's apt repo, installed per session, 2026-11-21), `-acc=gpu -gpu=cc75,nofma -Mnofma -Kieee`; also `-acc=multicore` (tested only) |
 | Notes | Free tier via the Colab CLI. Host buffers are pageable (`std::vector`), so h2d/d2h are not pinned-memory rates. CPU numbers from this VM are never used. |

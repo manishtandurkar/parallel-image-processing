@@ -19,7 +19,12 @@ option(PAGP_AUTOVEC_REPORT "Emit compiler vectorization reports for autovec" OFF
 # No FMA contraction anywhere: gray and sobel must match seq bit-for-bit, and contraction
 # would make the rounding of float expressions depend on the compiler and target.
 # (CXX only: nvcc gets the equivalent --fmad=false on the CUDA target.)
-add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-ffp-contract=off>")
+# nvc++ (OpenACC builds) spells it -Mnofma, and -Kieee keeps division and sqrt IEEE-exact.
+if(CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
+  add_compile_options(-Mnofma -Kieee)
+else()
+  add_compile_options("$<$<COMPILE_LANGUAGE:CXX>:-Wall;-Wextra;-ffp-contract=off>")
+endif()
 
 # Core library: image I/O, CLI, timing, CSV, validation, shared driver, and the seq reference
 # (every binary links seq so --validate can compare against it).
@@ -136,4 +141,33 @@ if(PAGP_CUDA)
   add_test(NAME cuda_vs_seq COMMAND test_cuda)
   add_test(NAME cuda_cli_smoke
     COMMAND pagp_cuda --gen 97x61 --op fused --block 8x8 --reps 1 --validate)
+endif()
+
+if(PAGP_ACC)
+  if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "NVHPC")
+    message(FATAL_ERROR "PAGP_ACC needs nvc++ from the NVIDIA HPC SDK (configure with CXX=nvc++)")
+  endif()
+  # Colab T4 = cc75. The same source builds twice: GPU (pagp_acc) and multicore (pagp_acc_mc).
+  set(PAGP_ACC_GPU_CC 75 CACHE STRING "Compute capability for the OpenACC GPU build")
+  foreach(kind gpu multicore)
+    if(kind STREQUAL "gpu")
+      set(sfx "")
+      set(flags -acc=gpu -gpu=cc${PAGP_ACC_GPU_CC},nofma)
+    else()
+      set(sfx "_mc")
+      set(flags -acc=multicore)
+    endif()
+    add_library(pagp_acc${sfx}_lib STATIC src/acc/acc.cpp)
+    target_compile_options(pagp_acc${sfx}_lib PRIVATE ${flags} -Minfo=accel)
+    target_link_options(pagp_acc${sfx}_lib PUBLIC ${flags})
+    target_include_directories(pagp_acc${sfx}_lib PUBLIC src/acc)
+    target_link_libraries(pagp_acc${sfx}_lib PUBLIC pagp_core)
+    add_executable(pagp_acc${sfx} src/acc/main.cpp)
+    target_link_libraries(pagp_acc${sfx} PRIVATE pagp_acc${sfx}_lib)
+    add_executable(test_acc${sfx} tests/test_acc.cpp)
+    target_link_libraries(test_acc${sfx} PRIVATE pagp_acc${sfx}_lib)
+    add_test(NAME acc${sfx}_vs_seq COMMAND test_acc${sfx})
+    add_test(NAME acc${sfx}_cli_smoke
+      COMMAND pagp_acc${sfx} --gen 97x61 --op pipeline --variant kernels --reps 1 --validate)
+  endforeach()
 endif()
