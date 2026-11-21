@@ -98,6 +98,11 @@ if(PAGP_OMP)
   pagp_backend(omp MAIN src/omp/main.cpp SOURCES src/omp/omp.cpp)
   target_link_libraries(pagp_omp_lib PUBLIC OpenMP::OpenMP_CXX)
   add_test(NAME omp_vs_seq COMMAND test_omp 1 2 3 10)
+
+  # Roofline ceilings (bandwidth, peak arithmetic rate); not a backend, see bench/ceilings.cpp.
+  add_executable(pagp_ceilings bench/ceilings.cpp)
+  target_compile_options(pagp_ceilings PRIVATE ${PAGP_NATIVE_FLAGS})
+  target_link_libraries(pagp_ceilings PRIVATE OpenMP::OpenMP_CXX)
 endif()
 
 if(PAGP_MPI)

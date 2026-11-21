@@ -247,6 +247,108 @@ def fig_weak(df, out):
     save(fig, out, "weak_pipeline.png")
 
 
+# Roofline work model per output pixel, from pixel.hpp (conversions and compares not counted).
+# ops: arithmetic operations; float only except sobel, whose gradient is integer work
+#   gray 3 mul + 2 add + 1 add (rounding) = 6
+#   blur2d 25 mul + 25 add + 1 = 51;  blur_sep h 5+5, v 5+5+1 = 21
+#   sobel gx, gy 2 x (5 add + 2 mul) + gx*gx+gy*gy (2 mul + 1 add) + sqrt + rounding add = 19
+#   pipeline = fused = 6 + 21 + 19 = 46
+# bytes: compulsory DRAM traffic, each buffer read or written once (no write-allocate):
+#   gray 3 in + 1 out; blur2d, sobel 1 + 1; blur_sep 1 + 4 (float tmp written) + 4 (read) + 1;
+#   pipeline 4 + 10 + 2 (all intermediates round-trip); fused 3 + 1 (intermediates stay in cache)
+OPS_PER_PX = {"gray": 6, "blur2d": 51, "blur_sep": 21, "sobel": 19, "pipeline": 46, "fused": 46}
+BYTES_PER_PX = {"gray": 4, "blur2d": 2, "blur_sep": 10, "sobel": 2, "pipeline": 16, "fused": 4}
+
+
+def load_ceilings(machine):
+    paths = sorted(glob.glob(f"bench/results/ceilings/{machine}_*.csv"))
+    if not paths:
+        return None
+    c = pd.read_csv(paths[-1])
+    return {(r.kind, int(r.threads)): r.value for r in c.itertuples()}
+
+
+def roofline_points(df, size, ncpu):
+    d = headline(df[(df["size"] == size) & df.backend.isin(["seq", "autovec", "simd", "omp"])], ncpu)
+    d = d[d.op.isin(OPS)].copy()
+    d["ai"] = d.op.map(OPS_PER_PX) / d.op.map(BYTES_PER_PX)
+    d["gops"] = d.op.map(OPS_PER_PX) * d.pixels / d.median_ms / 1e6
+    d["gbs"] = d.op.map(BYTES_PER_PX) * d.pixels / d.median_ms / 1e6
+    return d
+
+
+def fig_roofline(df, ceil, size, ncpu, out):
+    import numpy as np
+    d = roofline_points(df, size, ncpu)
+    fig, ax = plt.subplots(figsize=(8.5, 5))
+    ai = np.logspace(-1, 2.3, 200)
+    for t, ls in [(1, "--"), (ncpu, "-")]:
+        bw, pk = ceil.get(("triad_bw", t)), ceil.get(("peak_flops", t))
+        if bw is None or pk is None:
+            continue
+        ax.plot(ai, np.minimum(pk, ai * bw), color=INK2, linestyle=ls, linewidth=1.5,
+                label=f"{t} thread{'s' if t > 1 else ''}: {bw:.0f} GB/s, {pk:.0f} GFLOP/s")
+    op_markers = dict(zip(OPS, MARKERS))
+    for b in ["seq", "autovec", "simd", "omp"]:
+        sub = d[d.backend == b]
+        for r in sub.itertuples():
+            ax.scatter(r.ai, r.gops, color=BACKEND_STYLE[b][0], marker=op_markers[r.op], s=55,
+                       edgecolor=SURFACE, linewidth=0.8, zorder=3)
+    for op in OPS:  # op names once, next to the seq point
+        r = d[(d.backend == "seq") & (d.op == op)]
+        if len(r):
+            ax.annotate(op, (r.ai.iloc[0], r.gops.iloc[0]), textcoords="offset points",
+                        xytext=(6, -12), fontsize=8, color=INK2)
+    from matplotlib.lines import Line2D
+    handles, labels = ax.get_legend_handles_labels()
+    handles += [Line2D([], [], color=BACKEND_STYLE[b][0], marker="o", linestyle="")
+                for b in ["seq", "autovec", "simd", "omp"]]
+    labels += ["seq", "autovec", "simd (NEON)", f"omp static ({ncpu} threads)"]
+    handles += [Line2D([], [], color=INK2, marker=op_markers[o], linestyle="") for o in OPS]
+    labels += OPS
+    ax.legend(handles, labels, fontsize=8, ncols=2, loc="upper left")
+    ax.set_xscale("log")
+    ax.set_yscale("log")
+    ax.set_xlabel("arithmetic intensity (ops per byte of compulsory DRAM traffic)")
+    ax.set_ylabel("attained performance (G ops/s)")
+    ax.set_title(f"Roofline, {size_label(size)} image; measured ceilings (STREAM triad, "
+                 "mul+add peak)", fontsize=10)
+    save(fig, out, f"roofline_{size}.png")
+
+
+def table_roofline(df, ceil, size, ncpu, path):
+    d = roofline_points(df, size, ncpu)
+    bw1, pk1 = ceil[("triad_bw", 1)], ceil[("peak_flops", 1)]
+    bwn, pkn = ceil[("triad_bw", ncpu)], ceil[("peak_flops", ncpu)]
+    lines = [f"Roofline at {size}. Ceilings measured with bench/ceilings.cpp: 1 thread "
+             f"{bw1:.0f} GB/s, {pk1:.0f} GFLOP/s; {ncpu} threads {bwn:.0f} GB/s, {pkn:.0f} GFLOP/s.",
+             "Attainable = min(peak, AI x bandwidth) for the backend's thread count; "
+             "% = attained / attainable. Ridge point (peak / bandwidth): "
+             f"{pk1 / bw1:.1f} ops/byte at 1 thread, {pkn / bwn:.1f} at {ncpu}. Sobel ops are mostly "
+             "integer (8 x int16 per NEON instruction) measured against a float peak, so simd can "
+             "exceed 100%.",
+             "", f"| op | ops/px | bytes/px | AI | bound at 1 / {ncpu} threads | seq | simd | "
+             f"omp {ncpu}t | omp effective GB/s |", "|---|---:|---:|---:|---|---:|---:|---:|---:|"]
+    for op in OPS:
+        ai = OPS_PER_PX[op] / BYTES_PER_PX[op]
+        bound = " / ".join("memory" if ai * bw < pk else "compute" for bw, pk in
+                           [(bw1, pk1), (bwn, pkn)])
+        cells = []
+        for b, bw, pk in [("seq", bw1, pk1), ("simd", bw1, pk1), ("omp", bwn, pkn)]:
+            r = d[(d.backend == b) & (d.op == op)]
+            if r.empty:
+                cells.append("")
+                continue
+            att = min(pk, ai * bw)
+            cells.append(f"{r.gops.iloc[0]:.1f} G ({100 * r.gops.iloc[0] / att:.0f}%)")
+        o = d[(d.backend == "omp") & (d.op == op)]
+        cells.append(f"{o.gbs.iloc[0]:.0f}" if len(o) else "")
+        lines.append(f"| {op} | {OPS_PER_PX[op]} | {BYTES_PER_PX[op]} | {ai:.1f} | {bound} | "
+                     + " | ".join(cells) + " |")
+    path.write_text("\n".join(lines) + "\n")
+    print(path)
+
+
 GPU_OPS = OPS
 TRANSFER_STYLE = {"h2d": SERIES[0], "compute": SERIES[1], "d2h": SERIES[2]}
 
@@ -496,6 +598,10 @@ def main():
     fig_mpi_comm(df, args.scaling_size, figs)
     fig_sync(df, figs)
     fig_weak(df, figs)
+    ceil = load_ceilings(args.machine)
+    if ceil and (df["size"] == args.scaling_size).any():
+        fig_roofline(df, ceil, args.scaling_size, ncpu, figs)
+        table_roofline(df, ceil, args.scaling_size, ncpu, tables / f"{args.machine}_roofline.md")
 
 
 if __name__ == "__main__":

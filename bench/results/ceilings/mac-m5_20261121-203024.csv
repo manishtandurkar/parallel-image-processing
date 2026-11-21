@@ -1,0 +1,7 @@
+machine,kind,threads,value,unit
+mac-m5,triad_bw,1,116.85,GB/s
+mac-m5,peak_flops,1,71.13,GFLOP/s
+mac-m5,triad_bw,4,118.94,GB/s
+mac-m5,peak_flops,4,264.74,GFLOP/s
+mac-m5,triad_bw,10,124.05,GB/s
+mac-m5,peak_flops,10,436.75,GFLOP/s
