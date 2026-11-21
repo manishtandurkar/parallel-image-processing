@@ -9,6 +9,10 @@ Derived metrics (computed here, never in C++):
 Usage: python scripts/plot.py --machine mac-m5 [--csv FILE ...] [--size 4096x4096]
        [--scaling-size 7680x4320] [--out report]
 Writes report/figs/<machine>/*.png and report/tables/<machine>_compare.md.
+
+GPU machines (cuda/acc rows, no seq): python scripts/plot.py --machine colab-t4 --cpu-machine mac-m5
+GPU times: median_ms is compute only, end-to-end adds h2d_ms + d2h_ms (acc copy: median_ms already
+includes its transfers). The GPU vs CPU table compares two different machines and says so.
 """
 import argparse
 import glob
@@ -243,6 +247,197 @@ def fig_weak(df, out):
     save(fig, out, "weak_pipeline.png")
 
 
+GPU_OPS = OPS
+TRANSFER_STYLE = {"h2d": SERIES[0], "compute": SERIES[1], "d2h": SERIES[2]}
+
+
+def gpu_rows(df):
+    d = df[df.backend.isin(["cuda", "acc"])].copy()
+    d["h2d"] = d.h2d_ms.fillna(0)
+    d["d2h"] = d.d2h_ms.fillna(0)
+    d["e2e_ms"] = d.median_ms + d.h2d + d.d2h
+    return d
+
+
+def pick(d, backend, variant, size, op, workers=None):
+    r = d[(d.backend == backend) & (d.variant == variant) & (d["size"] == size) & (d.op == op)]
+    if workers is not None:
+        r = r[r.workers.astype(str) == workers]
+    return r.iloc[0] if len(r) else None
+
+
+def fig_gpu_breakdown(d, size, out):
+    """Stacked h2d / compute / d2h per op: CUDA naive (16x16) next to OpenACC parallel."""
+    configs = [("cuda", "naive", "16x16", "CUDA naive"), ("acc", "parallel", None, "OpenACC parallel")]
+    fig, ax = plt.subplots(figsize=(9, 4))
+    width = 0.38
+    for i, (b, v, wk, label) in enumerate(configs):
+        for j, op in enumerate(GPU_OPS):
+            r = pick(d, b, v, size, op, wk) if op != "fused" or b == "acc" else \
+                pick(d, "cuda", "tiled", size, op, "16x16")
+            if r is None:
+                continue
+            x = j + (i - 0.5) * width
+            bottom = 0
+            for part, val in [("h2d", r.h2d), ("compute", r.median_ms), ("d2h", r.d2h)]:
+                ax.bar(x, val, width, bottom=bottom, color=TRANSFER_STYLE[part],
+                       edgecolor=SURFACE, linewidth=1, hatch="//" if b == "acc" else None,
+                       label=f"{part}" if j == 0 and i == 0 else None)
+                bottom += val
+    ax.set_xticks(range(len(GPU_OPS)), GPU_OPS)
+    ax.set_ylabel("median time (ms)")
+    ax.set_title(f"GPU time breakdown, {size_label(size)}: left bar CUDA naive 16x16 (fused: tiled), "
+                 "right bar (hatched) OpenACC parallel", fontsize=9)
+    ax.legend(loc="upper left")
+    save(fig, out, f"gpu_breakdown_{size}.png")
+
+
+def fig_cuda_variants(d, size, out):
+    c = d[(d.backend == "cuda") & (d["size"] == size) & (d.workers.astype(str) == "16x16")]
+    if c.empty:
+        return
+    variants = ["naive", "const", "tiled"]
+    fig, ax = plt.subplots(figsize=(8, 3.6))
+    width = 0.27
+    for i, v in enumerate(variants):
+        sub = c[c.variant == v].set_index("op").reindex(GPU_OPS)
+        xs = [j + (i - 1) * width for j in range(len(GPU_OPS))]
+        ax.bar(xs, sub.median_ms, width, color=SERIES[i], label=v, edgecolor=SURFACE, linewidth=1.5)
+    ax.set_xticks(range(len(GPU_OPS)), GPU_OPS)
+    ax.set_ylabel("kernel time (ms)")
+    ax.set_title(f"CUDA memory variants, kernel time only, 16x16 blocks, {size_label(size)}")
+    ax.legend(ncols=3, loc="upper left")
+    save(fig, out, f"cuda_variants_{size}.png")
+
+
+def fig_cuda_blocks(d, size, out):
+    c = d[(d.backend == "cuda") & (d["size"] == size)]
+    blocks = ["8x8", "16x16", "32x8", "32x32"]
+    ops = [o for o in ["blur2d", "sobel", "pipeline", "fused"] if (c.op == o).any()]
+    if c.workers.nunique() < 2 or not ops:
+        return
+    fig, axes = plt.subplots(1, len(ops), figsize=(3 * len(ops), 3.4), sharey=False)
+    for ax, op in zip(axes, ops):
+        for i, v in enumerate(["naive", "const", "tiled"]):
+            sub = c[(c.op == op) & (c.variant == v)]
+            sub = sub.set_index(sub.workers.astype(str)).reindex(blocks)
+            if sub.median_ms.notna().sum() > 1:
+                ax.plot(blocks, sub.median_ms, color=SERIES[i], marker=MARKERS[i], label=v)
+        ax.set_title(op)
+        ax.set_xlabel("block (x by y threads)")
+        ax.set_ylim(bottom=0)
+    axes[0].set_ylabel("kernel time (ms)")
+    handles, labels = axes[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncols=3, bbox_to_anchor=(0.5, 1.06))
+    fig.suptitle(f"CUDA thread-block shape, {size_label(size)}", y=1.12, fontsize=10, color=INK2)
+    fig.tight_layout()
+    save(fig, out, f"cuda_blocks_{size}.png")
+
+
+def fig_acc_variants(d, size, small, out):
+    """Left: end-to-end time of the data strategies. Right: plain kernels vs parallel (compute)."""
+    a = d[d.backend == "acc"]
+    if a.empty:
+        return
+    fig, (ax, ax2) = plt.subplots(1, 2, figsize=(11, 3.8), gridspec_kw={"width_ratios": [3, 2]})
+    variants = [("parallel", "parallel + data region"), ("kernels_indep", "kernels + loop independent"),
+                ("copy", "copy clauses, no data region")]
+    width = 0.27
+    for i, (v, label) in enumerate(variants):
+        sub = a[(a.variant == v) & (a["size"] == size)].set_index("op").reindex(GPU_OPS)
+        xs = [j + (i - 1) * width for j in range(len(GPU_OPS))]
+        ax.bar(xs, sub.e2e_ms, width, color=SERIES[i], label=label, edgecolor=SURFACE, linewidth=1.5)
+    ax.set_xticks(range(len(GPU_OPS)), GPU_OPS)
+    ax.set_ylabel("end-to-end time incl. transfers (ms)")
+    ax.set_title(f"OpenACC data strategies, {size_label(size)}")
+    ax.legend(loc="upper left")
+    k = a[a["size"] == small]
+    if (k.variant == "kernels").any():
+        for i, v in enumerate(["parallel", "kernels"]):
+            sub = k[k.variant == v].set_index("op").reindex(GPU_OPS)
+            xs = [j + (i - 0.5) * 0.38 for j in range(len(GPU_OPS))]
+            ax2.bar(xs, sub.median_ms, 0.38, color=SERIES[3 + i], edgecolor=SURFACE, linewidth=1.5,
+                    label="parallel loop" if v == "parallel" else "kernels (compiler decides)")
+        ax2.set_yscale("log")
+        ax2.set_xticks(range(len(GPU_OPS)), GPU_OPS, rotation=30)
+        ax2.set_ylabel("compute time (ms, log scale)")
+        ax2.set_title(f"kernels without independence hint, {size_label(small)}")
+        ax2.legend(loc="upper left")
+    fig.tight_layout()
+    save(fig, out, f"acc_variants_{size}.png")
+
+
+def fig_gpu_throughput(d, out):
+    configs = [("cuda", "naive", "16x16"), ("acc", "parallel", None)]
+    fig, axes = plt.subplots(2, 3, figsize=(11, 6), sharex=True)
+    for ax, op in zip(axes.flat, GPU_OPS):
+        for i, (b, v, wk) in enumerate(configs):
+            vv = "tiled" if (b == "cuda" and op == "fused") else v
+            sub = d[(d.backend == b) & (d.variant == vv) & (d.op == op)]
+            if wk:
+                sub = sub[sub.workers.astype(str) == wk]
+            sub = sub.sort_values("pixels")
+            color, marker = BACKEND_STYLE[b]
+            ax.plot(sub.pixels / 1e6, sub.pixels / 1e3 / sub.median_ms, color=color, marker=marker,
+                    label=f"{b} {vv}, compute only")
+            ax.plot(sub.pixels / 1e6, sub.pixels / 1e3 / sub.e2e_ms, color=color, marker=marker,
+                    linestyle="--", label=f"{b} {vv}, incl. transfers")
+        ax.set_xscale("log")
+        ax.set_yscale("log")
+        ax.set_title(op)
+    for ax in axes[-1]:
+        ax.set_xlabel("image size (megapixels)")
+    for ax in axes[:, 0]:
+        ax.set_ylabel("throughput (MP/s, log)")
+    handles, labels = axes.flat[0].get_legend_handles_labels()
+    fig.legend(handles, labels, loc="upper center", ncols=2, bbox_to_anchor=(0.5, 1.06))
+    fig.suptitle("GPU throughput: compute only (solid) vs including host-device transfers (dashed); "
+                 "fused panel uses cuda tiled",
+                 y=1.1, fontsize=10, color=INK2)
+    fig.tight_layout()
+    save(fig, out, "gpu_throughput_vs_size.png")
+
+
+def table_gpu_vs_cpu(d, cpu, size, gpu_machine, cpu_machine, path):
+    ncpu = int(cpu[cpu.backend == "omp"].workers_n.max())
+    cols = ["seq", f"omp {ncpu}t", "cuda kernel", "cuda end-to-end", "acc compute",
+            "acc end-to-end"]
+    lines = [f"Median time in ms at {size}. seq/omp: {cpu_machine}; cuda/acc: {gpu_machine}. "
+             "Different machines: GPU speedup is only indicative.",
+             "cuda = naive 16x16 (fused: tiled), acc = parallel. Speedup vs seq in brackets.", "",
+             "| op | " + " | ".join(cols) + " |", "|---|" + "---:|" * len(cols)]
+    for op in OPS:
+        s = cpu[(cpu.backend == "seq") & (cpu.variant == "naive") & (cpu["size"] == size)
+                & (cpu.op == op)]
+        o = cpu[(cpu.backend == "omp") & (cpu.variant == "static") & (cpu["size"] == size)
+                & (cpu.op == op) & (cpu.workers_n == ncpu)]
+        c = pick(d, "cuda", "tiled" if op == "fused" else "naive", size, op, "16x16")
+        a = pick(d, "acc", "parallel", size, op)
+        base = s.median_ms.iloc[0] if len(s) else None
+        vals = [base, o.median_ms.iloc[0] if len(o) else None,
+                c.median_ms if c is not None else None, c.e2e_ms if c is not None else None,
+                a.median_ms if a is not None else None, a.e2e_ms if a is not None else None]
+        cells = ["" if v is None else (f"{v:.2f}" + (f" ({base / v:.1f}x)" if base else ""))
+                 for v in vals]
+        lines.append(f"| {op} | " + " | ".join(cells) + " |")
+    path.write_text("\n".join(lines) + "\n")
+    print(path)
+
+
+def gpu_main(df, args, figs, tables):
+    d = gpu_rows(df)
+    fig_gpu_breakdown(d, args.gpu_size, figs)
+    fig_cuda_variants(d, args.gpu_size, figs)
+    fig_cuda_blocks(d, args.scaling_size, figs)
+    fig_acc_variants(d, args.gpu_size, "512x512", figs)
+    fig_gpu_throughput(d, figs)
+    if args.cpu_machine:
+        cpu_paths = sorted(glob.glob(f"bench/results/{args.cpu_machine}_*.csv"))
+        cpu = load(cpu_paths, args.cpu_machine)
+        table_gpu_vs_cpu(d, cpu, args.size, args.machine, args.cpu_machine,
+                         tables / f"{args.machine}_vs_{args.cpu_machine}.md")
+
+
 def table_compare(df, size, ncpu, path):
     d = compare_rows(df, size, ncpu)
     backends = [b for b in BACKEND_STYLE if b in set(d.backend)]
@@ -267,6 +462,8 @@ def main():
     ap.add_argument("--csv", nargs="*", help="default: bench/results/<machine>_*.csv")
     ap.add_argument("--size", default="4096x4096", help="size for the comparison bar chart/table")
     ap.add_argument("--scaling-size", default="7680x4320")
+    ap.add_argument("--gpu-size", default="16384x16384", help="size for the GPU bar charts")
+    ap.add_argument("--cpu-machine", help="GPU machines: CPU machine for the GPU vs CPU table")
     ap.add_argument("--out", default="report")
     args = ap.parse_args()
 
@@ -284,6 +481,9 @@ def main():
     bad = df[df.max_abs_diff.notna() & (df.max_abs_diff > 1)]
     if not bad.empty:
         print(f"WARNING: {len(bad)} rows exceed max_abs_diff 1")
+    if not (df.backend == "seq").any():  # GPU machine: no same-machine seq baseline
+        gpu_main(df, args, figs, tables)
+        return
 
     if (df["size"] == args.size).any():
         fig_compare(df, args.size, ncpu, figs)
