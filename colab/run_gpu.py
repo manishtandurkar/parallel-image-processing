@@ -3,6 +3,9 @@
 # with the PAGP_STEPS env var (`colab exec --env PAGP_STEPS=...`), space separated:
 #   build   extract, configure (CUDA only), build, ctest
 #   sweep   bench/run_gpu.sh colab-t4  -> bench/results/colab-t4_cuda_<date>.csv
+#   pinned  bench/run_gpu.sh colab-t4 pinned  (pageable vs pinned host buffers)
+#   ncu     bench/run_ncu.sh: Nsight Compute metrics, naive vs const vs tiled kernels at 4096^2
+#           -> report/cuda/ncu/<op>_<variant>.csv
 #   acc-install  NVIDIA HPC SDK (nvc++) from NVIDIA's apt repo; skipped if already installed
 #   acc-build    configure build-acc with nvc++, build GPU + multicore, ctest; -Minfo=accel output
 #                -> report/acc/minfo_colab-t4.txt
@@ -73,3 +76,10 @@ if "acc-sweep" in STEPS:
 if "sweep" in STEPS:
     sh("bench/run_gpu.sh colab-t4")
     sh("ls -la bench/results/")
+
+if "pinned" in STEPS:
+    sh("bench/run_gpu.sh colab-t4 pinned")
+    sh("ls -la bench/results/")
+
+if "ncu" in STEPS:
+    sh("export PATH=/usr/local/cuda/bin:$PATH; bench/run_ncu.sh")

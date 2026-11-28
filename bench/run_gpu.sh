@@ -3,12 +3,12 @@
 # bench/results/<machine>_cuda_<date>.csv and a .cmd file with the exact command lines.
 #
 # Usage: bench/run_gpu.sh <machine-tag> [section ...]
-#   sections: compare blocks   (default: all)
+#   sections: compare blocks pinned   (default: compare blocks)
 # Env overrides: BUILD=build  REPS=10  SIZES="512x512 ... 16384x16384"
 #   BLOCK_SIZES="4096x4096 7680x4320"  BLOCKS="8x8 16x16 32x8 32x32"
 set -euo pipefail
 
-MACHINE=${1:?usage: bench/run_gpu.sh <machine-tag> [compare|blocks ...]}
+MACHINE=${1:?usage: bench/run_gpu.sh <machine-tag> [compare|blocks|pinned ...]}
 shift
 SECTIONS=${*:-compare blocks}
 
@@ -60,6 +60,14 @@ for section in $SECTIONS; do
             run --gen "$size" --op "$op" --variant "$v" --block "$b"
           done
         done
+      done
+    done
+    ;;
+  pinned) # pageable vs page-locked host buffers, same file so the pair is comparable
+    for size in $SIZES; do
+      for op in gray sobel pipeline; do
+        run --gen "$size" --op "$op" --variant naive --block 16x16
+        run --gen "$size" --op "$op" --variant naive --block 16x16 --pinned
       done
     done
     ;;

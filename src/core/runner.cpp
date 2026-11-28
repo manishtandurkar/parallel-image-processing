@@ -20,8 +20,8 @@ int tolerance(Op op) {
     return 1;
   case Op::Pipeline:
   case Op::Fused:
-    // Not fixed by the spec: a +-1 blur difference can grow through Sobel. Revisit with SIMD/GPU
-    // data.
+    // Not fixed by the spec: a +-1 blur difference could grow through Sobel. Kept at 1; every
+    // backend measured 0 on every size (report/findings.md).
     return 1;
   }
   return 0;

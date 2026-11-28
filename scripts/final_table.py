@@ -83,6 +83,8 @@ def load(machine):
 def best_config(d, backend, size):
     """Fastest pipeline configuration (variant, workers) at the backend's largest worker count."""
     p = d[(d.backend == backend) & (d["size"] == size) & (d.op == "pipeline")]
+    # +pinned rows exist only for some ops (separate transfer study): reported in a note instead.
+    p = p[~p.variant.str.endswith("+pinned")]
     if backend == "seq":  # seq appears in several files; the main CPU sweep is the reference
         p = p[(p.variant == "naive") & (p.src == d[d.backend == "omp"].src.iloc[0])]
     if p.empty:
@@ -97,7 +99,8 @@ def op_row(d, cfg, op, size):
     r = d[(d.backend == cfg.backend) & (d["size"] == size) & (d.op == op)
           & (d.variant == cfg.variant) & (d.workers.astype(str) == str(cfg.workers))]
     if r.empty:  # configuration lacks this op (e.g. cuda fused exists only as tiled)
-        r = d[(d.backend == cfg.backend) & (d["size"] == size) & (d.op == op)]
+        r = d[(d.backend == cfg.backend) & (d["size"] == size) & (d.op == op)
+              & (d.src == cfg.src)]
         if cfg.backend in ("omp", "mpi"):
             r = r[r.workers_n == cfg.workers_n]
         r = r.sort_values("e2e_ms" if cfg.backend in GPU else "median_ms")
@@ -188,6 +191,17 @@ def main():
               "brackets)", "",
               "| backend | " + " | ".join(OPS) + " |", "|---|" + "---:|" * len(OPS)]
     lines += ["| " + " | ".join(r) + " |" for r in per_op]
+    pin = gpu[(gpu.backend == "cuda") & (gpu["size"] == a.size) & (gpu.op == "pipeline")
+              & gpu.variant.str.endswith("+pinned")]
+    if not pin.empty:
+        r = pin.iloc[0]
+        base = gpu[(gpu.src == r.src) & (gpu.backend == "cuda") & (gpu["size"] == a.size)
+                   & (gpu.op == "pipeline") & (gpu.variant == r.variant.split("+")[0])].iloc[0]
+        lines += ["", f"Pinned host memory (separate {a.gpu_machine} session, {r.src}): CUDA "
+                  f"{r.variant} pipeline {r.e2e_ms:.2f} ms end-to-end vs {base.e2e_ms:.2f} ms "
+                  f"pageable in the same session ({seq['pipeline'] / r.e2e_ms:.1f}x vs "
+                  f"{seq['pipeline'] / base.e2e_ms:.1f}x seq †); transfers "
+                  f"{r.h2d_ms + r.d2h_ms:.2f} vs {base.h2d_ms + base.d2h_ms:.2f} ms."]
     Path(a.out).parent.mkdir(parents=True, exist_ok=True)
     Path(a.out).write_text("\n".join(lines) + "\n")
     print(a.out)

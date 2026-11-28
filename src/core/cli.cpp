@@ -28,6 +28,7 @@ static void usage(const char *prog) {
                "  --reps N           timed repetitions after 2 warm-ups (default 10)\n"
                "  --threads N        worker threads (omp)\n"
                "  --block WxH        thread block size (cuda, default 16x16)\n"
+               "  --pinned           page-locked host buffers for transfers (cuda)\n"
                "  --validate         compare with the seq reference\n"
                "  --save <path>      write the output image (PNG)\n"
                "  --csv <path>       append one result row\n"
@@ -94,6 +95,8 @@ bool parse_cli(int argc, char **argv, Options &o) {
         std::fprintf(stderr, "error: --block expects WxH with W*H <= 1024, got '%s'\n", v);
         return false;
       }
+    } else if (a == "--pinned") {
+      o.pinned = true;
     } else if (a == "--save") {
       if (!next(v))
         return false;

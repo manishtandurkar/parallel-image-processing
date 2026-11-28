@@ -11,7 +11,7 @@ Efficiency = speedup / workers (threads or ranks). Code size: non-blank, non-com
 | simd | NEON intrinsics | mac-m5 | neon | 16.73 | 2.61x |  | 2.46x | 156 | 1.5x | 2 |  |
 | omp | OpenMP threads | mac-m5 | static, 10 threads | 9.59 | 4.54x | 45% | 4.87x | 160 | 1.5x | 2 | 15 |
 | mpi | MPI processes | mac-m5 | overlap, 10 ranks | 17.13 | 2.96x | 30% | 1.75x | 215 | 2.0x | 123 |  |
-| cuda | CUDA kernels | colab-t4 | const, block 16x16 | 1.96 kernel / 16.22 e2e | 22.2x / 2.7x † |  | 2.2x e2e † | 406 | 3.8x | 96 |  |
+| cuda | CUDA kernels | colab-t4 | const, block 16x16 | 1.96 kernel / 16.22 e2e | 22.2x / 2.7x † |  | 2.2x e2e † | 415 | 3.9x | 108 |  |
 | acc | OpenACC directives (GPU) | colab-t4 | kernels_indep | 2.62 kernel / 17.44 e2e | 16.6x / 2.5x † |  | 1.8x e2e † | 351 | 3.3x | 100 | 22 |
 
 ## Speedup per op (same configuration; GPU: end-to-end with kernel-only in brackets)
@@ -25,3 +25,5 @@ Efficiency = speedup / workers (threads or ranks). Code size: non-blank, non-com
 | mpi (overlap, 10 ranks) | 0.38x | 2.89x | 1.87x | 1.67x | 2.96x | 2.80x |
 | cuda (const, block 16x16) | 0.3x (9x) † | 9.2x (54x) † | 2.5x (18x) † | 2.5x (24x) † | 2.7x (22x) † | 2.5x (12x) † |
 | acc (kernels_indep) | 0.3x (11x) † | 8.8x (54x) † | 2.3x (13x) † | 2.3x (22x) † | 2.5x (17x) † | 1.1x (2x) † |
+
+Pinned host memory (separate colab-t4 session, bench/results/colab-t4_cuda_20261128-060544.csv): CUDA naive+pinned pipeline 7.96 ms end-to-end vs 17.50 ms pageable in the same session (5.5x vs 2.5x seq †); transfers 5.37 vs 14.73 ms.

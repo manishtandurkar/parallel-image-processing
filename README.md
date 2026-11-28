@@ -15,11 +15,11 @@ The filters are the vehicle; the point of the project is the **measured analysis
 |----------------|-------------------------------------------------|----------------------|---------------|
 | `pagp_seq`     | Sequential reference (source of truth)          | Mac, WSL             | Done          |
 | `pagp_autovec` | Vectorizer-friendly scalar code (compiler SIMD) | Mac, WSL             | Done          |
-| `pagp_simd`    | Hand-written intrinsics: NEON (arm64) / AVX2 (x86-64) | Mac, WSL       | NEON done, AVX2 planned |
+| `pagp_simd`    | Hand-written intrinsics: NEON (arm64) / AVX2 (x86-64) | Mac, WSL       | NEON done, AVX2 to do (WSL) |
 | `pagp_omp`     | OpenMP multithreading                           | Mac, WSL             | Done          |
-| `pagp_mpi`     | MPI row-block decomposition + halo exchange     | Mac, WSL             | Planned       |
-| `pagp_cuda`    | CUDA kernels (naive / tiled / const / fused)    | Google Colab T4      | Planned       |
-| `pagp_acc`     | OpenACC (`nvc++ -acc=gpu` and `-acc=multicore`) | Google Colab T4      | Planned       |
+| `pagp_mpi`     | MPI row-block decomposition + halo exchange     | Mac, WSL             | Done          |
+| `pagp_cuda`    | CUDA kernels (naive / tiled / const / fused)    | Google Colab T4      | Done          |
+| `pagp_acc`     | OpenACC (`nvc++ -acc=gpu` and `-acc=multicore`) | Google Colab T4      | Done          |
 
 ## Filters
 
@@ -97,6 +97,8 @@ Every binary shares one CLI:
 --variant <name>               backend-specific (see below)
 --reps N                       timed runs after 2 untimed warm-ups (default 10)
 --threads N                    omp worker threads
+--block WxH                    cuda thread-block shape (default 16x16)
+--pinned                       cuda: page-locked host buffers for transfers
 --validate                     compare with the seq reference, record max_abs_diff
 --save <path>                  write the output image (PNG)
 --csv <path>                   append one result row
@@ -111,6 +113,9 @@ Variants available today:
 | `autovec` | `autovec` |
 | `simd`    | `neon` |
 | `omp`     | `static`, `dynamic`, `guided`; `gray` also has `false_sharing`, `padded` (128 B), `padded64`, `reduction`, `atomic` |
+| `mpi`     | `blocking` (`MPI_Sendrecv`), `overlap` (`Isend`/`Irecv` + interior compute); run with `mpirun -np N` |
+| `cuda`    | `naive`, `const`, `tiled`; `fused` op is `tiled` only; add `--pinned` for pinned host memory |
+| `acc`     | `parallel`, `kernels`, `kernels_indep`, `copy` (`pagp_acc` = GPU, `pagp_acc_mc` = multicore) |
 
 ## Benchmarking
 
@@ -130,9 +135,16 @@ Override defaults with `BUILD`, `REPS`, `SIZES`, `SCALING_SIZES`, `THREADS`.
 python scripts/plot.py --machine mac-m5
 ```
 
+MPI and GPU sweeps: `bench/run_mpi.sh <machine>` (local), `bench/run_gpu.sh` / `bench/run_acc.sh` /
+`bench/run_ncu.sh` (on the Colab VM, see [`colab/README.md`](colab/README.md)).
+
 `plot.py` computes the derived metrics (speedup vs `seq` on the same machine, efficiency, throughput in
 MP/s, strong and weak scaling) and writes figures to `report/figs/<machine>/` and a comparison table to
-`report/tables/<machine>_compare.md`.
+`report/tables/<machine>_compare.md`. For a GPU machine use
+`python scripts/plot.py --machine colab-t4 --cpu-machine mac-m5`. Other analysis scripts:
+`final_table.py` (cross-backend comparison), `ncu_table.py` (Nsight Compute summary),
+`sample_images.py` (processed sample images in `report/figs/samples/`). Written-up findings that
+go beyond the tables are in [`report/findings.md`](report/findings.md).
 
 Protocol highlights:
 
@@ -166,12 +178,16 @@ load-balancing findings, not a bug.
 include/pagp/     shared headers: image, filter spec, CLI, timer, CSV, validation, backend interface
 src/core/         image I/O, CLI parsing, CSV, validation, shared runner (main driver)
 src/seq/          sequential reference
-src/simd/         autovec.cpp, neon.cpp (avx2.cpp planned)
+src/simd/         autovec.cpp, neon.cpp (avx2.cpp to do)
 src/omp/          OpenMP backend
+src/mpi/          MPI backend (own driver: collective timing, comm_ms)
+src/cuda/         CUDA kernels (built on Colab)
+src/acc/          OpenACC backend (built with nvc++ on Colab)
 tests/            every backend vs seq on small and odd-sized images
-scripts/          gen_images.py (synthetic inputs), plot.py (figures and tables)
-bench/            run_cpu.sh sweep, machines.md, results/ CSVs
-report/           figures, tables, compiler vectorization reports
+scripts/          gen_images.py, plot.py, final_table.py, ncu_table.py, sample_images.py
+bench/            sweep scripts, ceilings.cpp (roofline), alias_sobel.cpp, machines.md, results/
+colab/            run_gpu.py (Colab job steps), README.md (CLI commands), logs/
+report/           figures, tables, findings.md, vectorization / -Minfo / ncu outputs
 third_party/stb/  stb_image / stb_image_write (vendored)
 ```
 

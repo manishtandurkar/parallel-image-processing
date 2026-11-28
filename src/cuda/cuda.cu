@@ -357,6 +357,14 @@ std::vector<std::string> variants(Op op) {
   }
 }
 
+uint8_t *host_alloc(size_t bytes) {
+  void *p = nullptr;
+  CUDA_CHECK(cudaMallocHost(&p, bytes));
+  return static_cast<uint8_t *>(p);
+}
+
+void host_free(uint8_t *p) { cudaFreeHost(p); }
+
 std::string device_name() {
   int dev = 0;
   cudaDeviceProp p;

@@ -15,6 +15,11 @@ colab upload -s pagp /tmp/pagp.tar.gz /content/pagp.tar.gz
 colab exec -s pagp --env PAGP_STEPS=build -f colab/run_gpu.py
 colab exec -s pagp --timeout 2900 --env PAGP_STEPS=sweep -f colab/run_gpu.py
 
+# 3a. Extras: pageable vs pinned transfers, and Nsight Compute profiles (report/cuda/ncu/)
+colab exec -s pagp --timeout 1800 --env PAGP_STEPS=pinned -f colab/run_gpu.py
+colab exec -s pagp --timeout 1800 --env PAGP_STEPS=ncu -f colab/run_gpu.py
+colab download -s pagp /content/pagp/report/cuda/ncu/<op>_<variant>.csv report/cuda/ncu/<op>_<variant>.csv
+
 # 3b. OpenACC (nvc++ is not preinstalled: acc-install downloads the HPC SDK, several GB, once per VM)
 colab exec -s pagp --timeout 2400 --env PAGP_STEPS=acc-install -f colab/run_gpu.py
 colab exec -s pagp --timeout 1800 --env PAGP_STEPS=acc-build -f colab/run_gpu.py
@@ -28,6 +33,9 @@ colab download -s pagp /content/pagp/bench/results/<name>.cmd bench/results/<nam
 colab log -s pagp -o colab/logs/<date>.md
 colab stop -s pagp
 ```
+
+We use this script (`colab/run_gpu.py`) instead of a notebook: it runs untested working-tree changes
+from the uploaded tarball and keeps every step in one versioned file. No `pagp_gpu.ipynb` is needed.
 
 The tar warnings about `LIBARCHIVE.xattr.com.apple.provenance` on the VM are harmless (macOS metadata).
 

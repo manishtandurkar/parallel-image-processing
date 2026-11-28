@@ -2,6 +2,7 @@
 // host compiler; everything CUDA lives in cuda.cu.
 #pragma once
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -24,6 +25,11 @@ std::string device_name();
 struct Timing {
   float h2d_ms = 0, kernel_ms = 0, d2h_ms = 0;
 };
+
+// Page-locked (pinned) host memory, for the --pinned transfer comparison: the driver can DMA it
+// directly instead of staging pageable memory through its own pinned buffer.
+uint8_t *host_alloc(size_t bytes);
+void host_free(uint8_t *p);
 
 // Device buffers for one image size and op, allocated once outside the timed region.
 class Context {

@@ -160,7 +160,8 @@ Rules:
   login is the OAuth flow above (or `--auth=adc` with gcloud). Run `colab skill` for the CLI's own guide.
 - Before the first CLI use, read the `COLAB_SKILL.md` bundled with the CLI and `colab --help`. If command names or
   flags differ from this file, follow the CLI's own docs and update this section.
-- `colab/pagp_gpu.ipynb` is edited locally (Jupyter / VS Code). `colab exec` sends only the notebook, so its first
+- Decision (2026-11-28): no notebook; `colab/run_gpu.py` (steps via `PAGP_STEPS`) is the GPU job. The text
+  below is kept for reference only. `colab/pagp_gpu.ipynb` would be edited locally (Jupyter / VS Code). `colab exec` sends only the notebook, so its first
   cells must get the code onto the VM: `git clone` the repo (preferred), or use the CLI's upload command for files
   not in git (e.g. large test images). Then `!nvidia-smi`, `!nvcc -arch=sm_75 ...`, and run the benchmark binaries.
 - Plain scripts also work and are what we use: `colab/run_gpu.py`, with the source uploaded as a tarball so
@@ -226,8 +227,7 @@ scripts/
   gen_images.py    # synthetic test images at fixed sizes
   plot.py          # speedup, efficiency, scaling, roofline plots
 colab/
-  pagp_gpu.ipynb   # edited locally, executed remotely with `colab exec`
-  run_gpu.py       # optional script version of the same GPU sweep
+  run_gpu.py       # the GPU job: build, sweep, pinned, ncu, acc-* steps (no notebook)
   logs/            # `colab log` output per session
   README.md        # Colab CLI session commands
 report/            # figures and write-up

@@ -469,6 +469,30 @@ def fig_acc_variants(d, size, small, out):
     save(fig, out, f"acc_variants_{size}.png")
 
 
+def fig_pinned(d, out):
+    """Effective PCIe bandwidth vs size, pageable vs pinned host buffers (pipeline: RGB in, gray
+    out). Both from the CSV that holds the +pinned rows, so each pair shares one session."""
+    pinned = d[(d.backend == "cuda") & d.variant.str.endswith("+pinned")]
+    if pinned.empty:
+        return
+    c = d[(d.backend == "cuda") & d.src.isin(set(pinned.src)) & (d.op == "pipeline")
+          & d.variant.isin(["naive", "naive+pinned"])].sort_values("pixels")
+    fig, ax = plt.subplots(figsize=(7, 4))
+    for i, (v, label) in enumerate([("naive", "pageable"), ("naive+pinned", "pinned")]):
+        s = c[c.variant == v]
+        for part, nbytes, ls in [("h2d", 3, "-"), ("d2h", 1, "--")]:
+            gbs = nbytes * s.pixels / (s[part] * 1e6)
+            ax.plot(s.pixels / 1e6, gbs, ls, color=SERIES[i], marker=MARKERS[i],
+                    label=f"{part}, {label}")
+    ax.set_xscale("log")
+    ax.set_xlabel("image size (megapixels)")
+    ax.set_ylabel("effective bandwidth (GB/s)")
+    ax.set_ylim(bottom=0)
+    ax.set_title("Host-device transfers, CUDA pipeline: pageable vs pinned host memory")
+    ax.legend()
+    save(fig, out, "gpu_pinned_bandwidth.png")
+
+
 def fig_gpu_throughput(d, out):
     configs = [("cuda", "naive", "16x16"), ("acc", "parallel", None)]
     fig, axes = plt.subplots(2, 3, figsize=(11, 6), sharex=True)
@@ -527,12 +551,17 @@ def table_gpu_vs_cpu(d, cpu, size, gpu_machine, cpu_machine, path):
 
 
 def gpu_main(df, args, figs, tables):
-    d = gpu_rows(df)
+    all_rows = gpu_rows(df)
+    # A configuration repeated in a later file (the pinned sweep re-runs naive as its pageable
+    # baseline): keep the earliest, so every other GPU figure comes from the one full sweep.
+    d = all_rows.drop_duplicates(["backend", "variant", "op", "width", "height", "workers"],
+                                 keep="first")
     fig_gpu_breakdown(d, args.gpu_size, figs)
     fig_cuda_variants(d, args.gpu_size, figs)
     fig_cuda_blocks(d, args.scaling_size, figs)
     fig_acc_variants(d, args.gpu_size, "512x512", figs)
     fig_gpu_throughput(d, figs)
+    fig_pinned(all_rows, figs)
     if args.cpu_machine:
         cpu_paths = sorted(glob.glob(f"bench/results/{args.cpu_machine}_*.csv"))
         cpu = load(cpu_paths, args.cpu_machine)

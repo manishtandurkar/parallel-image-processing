@@ -113,6 +113,10 @@ if(PAGP_MPI)
   target_link_libraries(pagp_mpi_lib PUBLIC pagp_core MPI::MPI_CXX)
   add_executable(pagp_mpi src/mpi/main.cpp)
   target_link_libraries(pagp_mpi PRIVATE pagp_mpi_lib)
+
+  # Sobel buffer-distance sweep explaining the 8K np=4 pipeline anomaly; see bench/alias_sobel.cpp.
+  add_executable(pagp_alias_sobel bench/alias_sobel.cpp)
+  target_link_libraries(pagp_alias_sobel PRIVATE pagp_core)
   add_executable(test_mpi tests/test_mpi.cpp)
   target_link_libraries(test_mpi PRIVATE pagp_mpi_lib)
   foreach(np 1 3 4)

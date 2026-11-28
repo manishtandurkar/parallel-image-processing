@@ -1,6 +1,7 @@
 // pagp_cuda driver: same CLI as the other backends plus --block WxH. Its own driver (not run_main)
 // because each rep has three separately timed phases. CSV: median_ms/min_ms = kernel time only;
 // h2d_ms/d2h_ms = median transfer times (add them for end-to-end time); workers = block size.
+// --pinned transfers from page-locked host buffers; the CSV variant becomes "<variant>+pinned".
 #include <algorithm>
 #include <cstdio>
 #include <vector>
@@ -42,11 +43,20 @@ int main(int argc, char **argv) {
   }
   Image out(src.w, src.h, 1);
 
+  // --pinned: transfer from/to page-locked copies (filled and read back outside the timed region).
+  const size_t in_bytes = src.data.size(), out_bytes = out.data.size();
+  uint8_t *src_p = src.data.data(), *out_p = out.data.data();
+  if (o.pinned) {
+    src_p = cuda::host_alloc(in_bytes);
+    out_p = cuda::host_alloc(out_bytes);
+    std::copy(src.data.begin(), src.data.end(), src_p);
+  }
+  const std::string label = o.pinned ? variant + "+pinned" : variant;
+
   cuda::Context ctx(src.w, src.h, o.op);
   std::vector<double> h2d, kern, d2h, total;
   for (int i = 0; i < o.warmup + o.reps; ++i) {
-    cuda::Timing t =
-        cuda::run(o.op, variant, o.block_w, o.block_h, ctx, src.data.data(), out.data.data());
+    cuda::Timing t = cuda::run(o.op, variant, o.block_w, o.block_h, ctx, src_p, out_p);
     if (i >= o.warmup) {
       h2d.push_back(t.h2d_ms);
       kern.push_back(t.kernel_ms);
@@ -55,6 +65,11 @@ int main(int argc, char **argv) {
     }
   }
   TimingStats tk = summarize(kern), th = summarize(h2d), td = summarize(d2h), tt = summarize(total);
+  if (o.pinned) {
+    std::copy(out_p, out_p + out_bytes, out.data.begin());
+    cuda::host_free(src_p);
+    cuda::host_free(out_p);
+  }
 
   int diff = -1;
   if (o.validate) {
@@ -68,7 +83,7 @@ int main(int argc, char **argv) {
   std::string block = std::to_string(o.block_w) + "x" + std::to_string(o.block_h);
   std::printf("cuda %s/%s %dx%d block=%s reps=%d kernel median=%.3f ms min=%.3f ms "
               "h2d=%.3f ms d2h=%.3f ms total=%.3f ms",
-              op_name(o.op), variant.c_str(), src.w, src.h, block.c_str(), o.reps, tk.median_ms,
+              op_name(o.op), label.c_str(), src.w, src.h, block.c_str(), o.reps, tk.median_ms,
               tk.min_ms, th.median_ms, td.median_ms, tt.median_ms);
   if (diff >= 0)
     std::printf(" max_abs_diff=%d", diff);
@@ -82,7 +97,7 @@ int main(int argc, char **argv) {
     ResultRow r;
     r.machine = o.machine;
     r.backend = "cuda";
-    r.variant = variant;
+    r.variant = label;
     r.op = op_name(o.op);
     r.width = src.w;
     r.height = src.h;

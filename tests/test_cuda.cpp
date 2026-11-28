@@ -1,6 +1,7 @@
 // CUDA backend vs seq: every op x variant x size x block shape must match seq exactly
 // (same arithmetic order, built with --fmad=false). Odd sizes exercise partial edge blocks and
 // images smaller than one block.
+#include <algorithm>
 #include <cstdio>
 
 #include "cuda_backend.hpp"
@@ -38,6 +39,28 @@ int main() {
                         v.c_str(), src.w, src.h, bl[0], bl[1], d);
           }
         }
+    }
+  }
+  // Pinned host buffers (--pinned) go through the same run(); check one op end to end.
+  {
+    Image rgb = generate_image(257, 131, 7);
+    Image ref(rgb.w, rgb.h, 1);
+    Workspace ws;
+    ws.reserve(rgb.w, rgb.h);
+    run_reference(Op::Pipeline, rgb, ref, ws);
+    uint8_t *in = cuda::host_alloc(rgb.data.size()), *o = cuda::host_alloc(ref.data.size());
+    std::copy(rgb.data.begin(), rgb.data.end(), in);
+    cuda::Context ctx(rgb.w, rgb.h, Op::Pipeline);
+    cuda::run(Op::Pipeline, "naive", 16, 16, ctx, in, o);
+    Image out(rgb.w, rgb.h, 1);
+    std::copy(o, o + out.data.size(), out.data.begin());
+    cuda::host_free(in);
+    cuda::host_free(o);
+    int d = max_abs_diff(out, ref);
+    ++cases;
+    if (d != 0) {
+      ++failures;
+      std::printf("FAIL cuda pipeline/naive+pinned max_abs_diff=%d\n", d);
     }
   }
   std::printf("cuda: %d/%d cases passed (exact)\n", cases - failures, cases);
